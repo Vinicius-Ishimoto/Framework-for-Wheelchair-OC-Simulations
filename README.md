@@ -1,5 +1,5 @@
 # Framework-for-Wheelchair-OC-Simulations
-Framework for Optioml control simulations of Wheelchairs
+Framework for Optimal control simulations of Wheelchairs
 
 Framework that uses a four-bar system to represent the wheelchair-user interaction in the sagital plane. Coded on MATLAB.
 
