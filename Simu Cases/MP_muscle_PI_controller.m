@@ -1,0 +1,510 @@
+function output = MP_muscle_PI_controller(PAR,ncycle,velocity,distance,varargin)
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if nargin==1
+    error = mesh_error(PAR);
+    Mpos = max([error.phase(:).positionmax]);
+    Mvel = max([error.phase(:).velocitymax]);
+    Merr = max([Mpos,Mvel]);
+    output = Merr;
+    return
+end
+medtime = distance/(velocity*(ncycle*2+1));
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Act_v = 0;
+max_velang = 500;
+t_ini = PAR.thetac1; % -120*pi/180, PAR.thetac1
+mintime = 0.1;
+maxalpha = 160*pi/180;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+setup.auxdata.PAR = PAR;
+setup.auxdata.ncycle = ncycle;
+% setup.auxdata.alphai  = alphai;
+% setup.auxdata.betai  = betai;
+% setup.auxdata.iJi = [-(PAR.R*sin(betai - PAR.thetai))/(PAR.A*sin(alphai - betai)),(PAR.R*sin(alphai - PAR.thetai))/(PAR.B*sin(alphai - betai)),1];
+p = inputParser;
+
+
+addParameter(p,'Guess',-1);
+addParameter(p,'Contact_angle',0,@(x) assert(x*pi/180<PAR.thetac2-PAR.thetac1,['Contact angle need to be smaller than ',num2str((PAR.thetac2-PAR.thetac1)*180/pi),' degrees.']));
+addParameter(p,'thetaf',PAR.thetaf*180/pi,@(x) assert(x*pi/180<PAR.thetac2,['Contact angle need to be smaller than ',num2str((PAR.thetac2)*180/pi),' degrees.']));
+addParameter(p,'Max_control',inf,@isnumeric);
+addParameter(p,'Max_shoulder',-1,@isnumeric);
+addParameter(p,'Max_elbow',-1,@isnumeric);
+addParameter(p,'ControllerK',PAR.const,@isnumeric);
+addParameter(p,'Mi',PAR.Mi,@isnumeric);
+addParameter(p,'Ci',PAR.Ci,@isnumeric);
+addParameter(p,'indice',2,@isnumeric);
+addParameter(p,'MinMax',false,@islogical);
+addParameter(p,'Fixed',false,@islogical);
+addParameter(p,'FixedStart',false,@islogical);
+
+FixedDist = true;
+if distance <= 0
+    FixedDist = false;
+end
+parse(p,varargin{:});
+opt = p.Results.Guess;
+Contact = p.Results.Contact_angle*pi/180;
+MContr = p.Results.Max_control;
+MShoulder = p.Results.Max_shoulder;
+isFixed = p.Results.Fixed;
+hasFixedStart = p.Results.FixedStart;
+setup.auxdata.const = p.Results.ControllerK;
+setup.auxdata.PAR.Mi = p.Results.Mi;
+setup.auxdata.PAR.Ci = p.Results.Ci;
+if MShoulder < 0
+	MShoulder = MContr;
+end
+MElbow = p.Results.Max_elbow;
+if MElbow < 0
+	MElbow = MContr;
+end
+if hasFixedStart
+	hFS = 0;
+else
+	hFS = inf;
+end
+
+setup.function = @Dynamics_Multi;
+setup.auxdata.indice = p.Results.indice;
+PAR.thetaf = p.Results.thetaf;
+setup.auxdata.PAR.thetaf = p.Results.thetaf;
+
+%% Boundary Constraints
+% Propulsion
+for i = 0:ncycle
+	cnt = 2*i+1;
+	
+	setup.bound.lower.phase(cnt).initial.velocity = 0;
+	setup.bound.upper.phase(cnt).initial.velocity = 50;
+    setup.bound.lower.phase(cnt).initial.state = [  0,-inf];
+	setup.bound.upper.phase(cnt).initial.state = [inf, inf];
+	setup.bound.lower.phase(cnt).initial.time = 0;
+	setup.bound.upper.phase(cnt).initial.time = inf;
+	if not(isFixed)
+		setup.bound.lower.phase(cnt).initial.position = t_ini;
+		setup.bound.upper.phase(cnt).initial.position = PAR.thetac2;
+		setup.bound.lower.phase(cnt).final.position = PAR.thetac1;
+		setup.bound.upper.phase(cnt).final.position = PAR.thetac2;
+		
+	else
+		setup.bound.lower.phase(cnt).initial.position = PAR.thetai;
+		setup.bound.upper.phase(cnt).initial.position = PAR.thetai;
+		setup.bound.lower.phase(cnt).final.position = PAR.thetac1;
+		setup.bound.upper.phase(cnt).final.position = PAR.thetac2;
+	end
+	
+	setup.bound.lower.phase(cnt).final.velocity = 0;
+	setup.bound.upper.phase(cnt).final.velocity = 50;
+    setup.bound.lower.phase(cnt).final.state = [  0,-inf];
+	setup.bound.upper.phase(cnt).final.state = [inf, inf];
+	setup.bound.lower.phase(cnt).final.time = 0.1;
+	setup.bound.upper.phase(cnt).final.time = inf;
+	setup.bound.lower.phase(cnt).position = PAR.thetac1;
+	setup.bound.upper.phase(cnt).position = PAR.thetac2;
+	setup.bound.lower.phase(cnt).velocity = 0;
+	setup.bound.upper.phase(cnt).velocity = 50;
+    setup.bound.lower.phase(cnt).state = [  0,-inf];
+	setup.bound.upper.phase(cnt).state = [inf, inf];
+	setup.bound.lower.phase(cnt).control = [0, 0,  30*pi/180,-pi/2, 0, 0,-inf,        0,     0,        0,     0];
+	setup.bound.upper.phase(cnt).control = [1, 1,   maxalpha,   pi, 1, 1,+inf,MShoulder,MElbow,MShoulder,MElbow];
+	setup.bound.lower.phase(cnt).path = [  0*pi/180,0,0,0,-Act_v,-Act_v,-Act_v,-Act_v];
+	setup.bound.upper.phase(cnt).path = [120*pi/180,0,0,0,+Act_v,+Act_v,+Act_v,+Act_v];
+	setup.phase(cnt).mesh_points = 10;
+	setup.phase(cnt).mesh_number = 10;
+end
+
+% Recovery
+for i = 1:ncycle
+	cnt = 2*i;
+	setup.bound.lower.phase(cnt).initial.position = [ 30*pi/180,-pi/2,PAR.thetac1];
+	setup.bound.upper.phase(cnt).initial.position = [  maxalpha,   pi,PAR.thetac2];
+	setup.bound.lower.phase(cnt).initial.velocity = [-max_velang,-max_velang, 0];
+	setup.bound.upper.phase(cnt).initial.velocity = [+max_velang,+max_velang,50];
+    setup.bound.lower.phase(cnt).initial.state = [  0,-inf];
+	setup.bound.upper.phase(cnt).initial.state = [inf, inf];
+	setup.bound.lower.phase(cnt).initial.time = 0.1;
+	setup.bound.upper.phase(cnt).initial.time = inf;
+	% setup.bound.lower.phase(cnt).final.position = [0,-pi/2,-150*pi/180];
+	setup.bound.lower.phase(cnt).final.position = [ 30*pi/180,-pi/2,PAR.thetac1];
+	setup.bound.upper.phase(cnt).final.position = [  maxalpha,   pi,        inf];
+	setup.bound.lower.phase(cnt).final.velocity = [-max_velang,-max_velang, 0];
+	setup.bound.upper.phase(cnt).final.velocity = [+max_velang,+max_velang,50];
+    setup.bound.lower.phase(cnt).final.state = [  0,-inf];
+	setup.bound.upper.phase(cnt).final.state = [inf, inf];
+	setup.bound.lower.phase(cnt).final.time = 0.2;
+	setup.bound.upper.phase(cnt).final.time = inf;
+	setup.bound.lower.phase(cnt).position = [ 30*pi/180,-pi/2,PAR.thetac1];
+	setup.bound.upper.phase(cnt).position = [  maxalpha,   pi,        inf];
+	setup.bound.lower.phase(cnt).velocity = [-max_velang,-max_velang, 0];
+	setup.bound.upper.phase(cnt).velocity = [+max_velang,+max_velang,50];
+    setup.bound.lower.phase(cnt).state = [  0,-inf];
+	setup.bound.upper.phase(cnt).state = [inf, inf];
+	setup.bound.lower.phase(cnt).control = [0,0,0,0,0,0,0,0];
+	setup.bound.upper.phase(cnt).control = [1,1,1,1,MShoulder,MElbow,MShoulder,MElbow];
+	setup.bound.lower.phase(cnt).path = [  0*pi/180,-Act_v,-Act_v,-Act_v,-Act_v];
+	setup.bound.upper.phase(cnt).path = [120*pi/180,+Act_v,+Act_v,+Act_v,+Act_v];
+	setup.phase(cnt).mesh_points = 12;
+	setup.phase(cnt).mesh_number = 12;
+end
+
+% Parameter
+setup.bound.lower.parameter = [PAR.thetac1];
+setup.bound.upper.parameter = [PAR.thetac2];
+
+% Start Conditions
+setup.bound.lower.phase(1).initial.velocity = 0;
+setup.bound.upper.phase(1).initial.velocity = 0;
+setup.bound.lower.phase(1).initial.time = 0;
+setup.bound.upper.phase(1).initial.time = 0;
+setup.bound.lower.phase(1).initial.state = [ 0, 0];
+setup.bound.upper.phase(1).initial.state = [ 0, 0];
+
+% Final Time
+if FixedDist
+    setup.bound.lower.phase(end).final.time = distance/velocity;
+    setup.bound.upper.phase(end).final.time = distance/velocity;
+else
+    setup.bound.lower.phase(end).final.time = 0.2;
+    setup.bound.upper.phase(end).final.time = inf;
+end
+
+% Point Constraints
+ub = [];
+lb = [];
+for i = 1:ncycle
+	ub = [ub,zeros(1,17),    inf,    inf,    inf,+hFS];
+	lb = [lb,zeros(1,17),mintime,mintime,Contact,-hFS];
+end
+setup.bound.lower.pconstraints = [lb,mintime,velocity,-hFS];
+setup.bound.upper.pconstraints = [ub,    inf,velocity,+hFS];
+
+%% Initial Guess
+% Propulsion
+for i = 0:ncycle
+	cnt = 2*i+1;
+    numl = numel(opt.solution.phase(cnt).time);
+	setup.initial_guess.phase(cnt).time = opt.solution.phase(cnt).time;
+	setup.initial_guess.phase(cnt).position = opt.solution.phase(cnt).position;
+	setup.initial_guess.phase(cnt).velocity = opt.solution.phase(cnt).velocity;
+	if size(opt.solution.phase(cnt).control,2) == 11
+		setup.initial_guess.phase(cnt).control = [opt.solution.phase(cnt).control];
+	else
+		setup.initial_guess.phase(cnt).control(:,1) = opt.solution.phase(cnt).control(:,1)/max(opt.solution.phase(cnt).control(:,1)+0.01);
+		setup.initial_guess.phase(cnt).control(:,2) = opt.solution.phase(cnt).control(:,2)/max(opt.solution.phase(cnt).control(:,2)+0.01);
+		setup.initial_guess.phase(cnt).control(:,3:4) = opt.solution.phase(cnt).control(:,3:4);
+		setup.initial_guess.phase(cnt).control(:,5) = opt.solution.phase(cnt).control(:,5)/max(opt.solution.phase(cnt).control(:,5)+0.01);
+		setup.initial_guess.phase(cnt).control(:,6) = opt.solution.phase(cnt).control(:,6)/max(opt.solution.phase(cnt).control(:,6)+0.01);
+		setup.initial_guess.phase(cnt).control(:,7) = opt.solution.phase(cnt).taup;
+		setup.initial_guess.phase(cnt).control(:,8:9) = opt.solution.phase(cnt).control(:,1:2);
+		setup.initial_guess.phase(cnt).control(:,10:11) = opt.solution.phase(cnt).control(:,5:6);   
+    end
+    switch opt.Options.Type
+        case 'MSD-PI_Controller'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).state(:,1:2)];
+        case 'MSC-Reference'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).velocity(:,end)*PAR.Rr+rand(numl,1), opt.solution.phase(cnt).control(:,1)];
+        case 'MSD-Reference'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).velocity(:,end)*PAR.Rr+rand(numl,1), opt.solution.phase(cnt).control(:,1)];
+        otherwise
+            setup.initial_guess.phase(cnt).state = [opt.solution.phase(cnt).state];
+    end
+end
+	
+% Recovery
+for i = 1:ncycle
+	cnt = 2*i;	
+    numl = numel(opt.solution.phase(cnt).time);
+	setup.initial_guess.phase(cnt).time = opt.solution.phase(cnt).time;
+	setup.initial_guess.phase(cnt).position = opt.solution.phase(cnt).position;
+	setup.initial_guess.phase(cnt).velocity = opt.solution.phase(cnt).velocity;
+	if size(opt.solution.phase(cnt).control,2) == 8
+		setup.initial_guess.phase(cnt).control = [opt.solution.phase(cnt).control];
+	else
+		setup.initial_guess.phase(cnt).control(:,1) = opt.solution.phase(cnt).control(:,1)/max(opt.solution.phase(cnt).control(:,1)+0.01);
+		setup.initial_guess.phase(cnt).control(:,2) = opt.solution.phase(cnt).control(:,2)/max(opt.solution.phase(cnt).control(:,2)+0.01);
+		setup.initial_guess.phase(cnt).control(:,3) = opt.solution.phase(cnt).control(:,3)/max(opt.solution.phase(cnt).control(:,3)+0.01);
+		setup.initial_guess.phase(cnt).control(:,4) = opt.solution.phase(cnt).control(:,4)/max(opt.solution.phase(cnt).control(:,4)+0.01);
+		setup.initial_guess.phase(cnt).control(:,5:8) = opt.solution.phase(cnt).control(:,1:4);   
+    end
+    switch opt.Options.Type
+        case 'MSD-PI_Controller'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).state(:,1:2)];
+        case 'MSC-Reference'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).velocity(:,end)*PAR.Rr+rand(numl,1), opt.solution.phase(cnt).control(:,1)];
+        case 'MSD-Reference'
+            setup.initial_guess.phase(cnt).state(:,1:2) = [opt.solution.phase(cnt).velocity(:,end)*PAR.Rr+rand(numl,1), opt.solution.phase(cnt).control(:,1)];
+        otherwise
+            setup.initial_guess.phase(cnt).state = [opt.solution.phase(cnt).state];
+    end
+end
+
+% States
+if isfield(opt.solution.phase(1), 'state')
+    setup.auxdata.tracking = 0;
+else
+    setup.auxdata.tracking = 0; % 1
+%     setup.constant_vector.phase(cnt).time = opt.solution.phase(cnt).time;
+%     setup.constant_vector.phase(cnt).variables = [opt.solution.phase(cnt).control(:,3:4), opt.solution.phase(cnt).control(:,1:2), opt.solution.phase(cnt).control(:,5:6)];
+end
+    
+
+% Parameter
+setup.initial_guess.parameter = -100*pi/180;
+
+%% Run Program
+output = ddiopt_MB(setup);
+
+%% Options used in this simulation
+output.Options.Type = 'MSC-PI_Controller';
+output.Options.NumCycles = ncycle;
+output.Options.TotalDistance = distance;
+output.Options.MeanVelocity = velocity;
+output.Options.Guess = setup.initial_guess;
+output.Options.MinContactAngle = Contact;
+output.Options.thetaf = PAR.thetaf;
+output.Options.MaxControl = MContr;
+output.Options.MaxShoulder = MShoulder;
+output.Options.MaxElbow = MElbow;
+output.Options.Indice = setup.auxdata.indice;
+output.Options.FixedContactAngle = isFixed;
+output.Options.FixedStartAngle = hasFixedStart;
+output.Options.KController = p.Results.ControllerK;
+output.Options.ImpedanceMass = p.Results.Mi;
+output.Options.ImpedanceFriction = p.Results.Ci;
+
+%% Return tau_p
+% Propulsion
+for i = 0:ncycle
+	cnt = 2*i+1;
+    % q1 = vect([output.solution.phase(cnt).control(:,3:4),output.solution.phase(cnt).position]);
+    % [da,db,PHI,dPHI] = idof_transform(vect(output.solution.phase(cnt).control(:,3)),vect(output.solution.phase(cnt).control(:,4)),vect(output.solution.phase(cnt).position),vect(output.solution.phase(cnt).velocity),PAR);
+    % qd1 = [da,db,vect(output.solution.phase(cnt).velocity)];
+    % [M1,ke1,~,H1,k1] = four_bar_system_no_motor(q1, qd1, PAR);
+    
+    % K = PHI'*(ke1+H1*[vect(output.solution.phase(cnt).control(:,1))-vect(output.solution.phase(cnt).control(:,5));vect(output.solution.phase(cnt).control(:,2))-vect(output.solution.phase(cnt).control(:,6))]-k1);
+    % MM = PHI'*M1*PHI;
+    % ddt = (K-PHI'*M1*dPHI*vect(output.solution.phase(cnt).velocity))./MM;
+    % qdd = PHI*ddt+dPHI*vect(output.solution.phase(cnt).velocity);
+    % tp = M1(3,:)*qdd-(ke1(3)+H1(3,:)*[vect(output.solution.phase(cnt).control(:,1))-vect(output.solution.phase(cnt).control(:,5));vect(output.solution.phase(cnt).control(:,2))-vect(output.solution.phase(cnt).control(:,6))]-k1(3));
+    % output.solution.phase(cnt).taup = double(tp);
+	output.solution.phase(cnt).taup = output.solution.phase(cnt).control(:,7);
+end
+% Recovery
+for i = 1:ncycle
+	cnt = 2*i;
+    output.solution.phase(cnt).taup = zeros(numel(output.solution.phase(cnt).velocity(:,1)),1);
+end
+
+%% Internal Function
+function output = Dynamics_Multi(input)
+
+p_constraints = [];
+obj = 0;
+theta_total = 0;
+cont = 1;
+Mi = input.auxdata.PAR.Mi;
+Ci = input.auxdata.PAR.Ci;
+Kte = input.auxdata.const;
+Jtotal = input.auxdata.PAR.Jf; % Jmt - C/Motor; Jmf - S/Motor
+Btotal = input.auxdata.PAR.Bf+0.01; % Bt - C/Motor; Bf - S/Motor
+ncycle = input.auxdata.ncycle;
+indice = input.auxdata.indice;
+
+%%% Original coordinates system: Extension is positive, Flexion is negative
+Qv  = cell(1,2*ncycle+1);
+Qdv = cell(1,2*ncycle+1);
+act = cell(1,2*ncycle+1);
+tau = cell(1,2*ncycle+1);
+PHI = cell(1,2*ncycle+1);
+dPHI= cell(1,2*ncycle+1);
+TV  = cell(1,2*ncycle+1);
+TP  = cell(1,2*ncycle+1);
+CTR = cell(1,2*ncycle+1);
+LC  = cell(1,2*ncycle+1);
+%% Propulsion
+for i=0:input.auxdata.ncycle
+	cnt = 2*i+1;
+	
+	theta1 = input.phase(cnt).position;
+	dtheta1 = input.phase(cnt).velocity;
+	alpha1 = input.phase(cnt).control(:,3);
+	beta1 = input.phase(cnt).control(:,4);
+	[dalpha1,dbeta1,PHI{cnt},dPHI{cnt}] = idof_transform(alpha1,beta1,theta1,dtheta1,input.auxdata.PAR);
+	Qv{cnt}  = [alpha1,beta1,theta1];
+	Qdv{cnt} = [dalpha1,dbeta1,dtheta1];
+	
+	as_e  = input.phase(cnt).control(:,1);
+	as_f  = input.phase(cnt).control(:,5);
+	ae_e  = input.phase(cnt).control(:,2);
+	ae_f  = input.phase(cnt).control(:,6);
+	act{cnt} = [as_e;as_f;ae_e;ae_f];
+	ts_e  = input.phase(cnt).control(:,8);
+	ts_f  = input.phase(cnt).control(:,10);
+	te_e  = input.phase(cnt).control(:,9);
+	te_f  = input.phase(cnt).control(:,11);
+	tau{cnt} = [ts_e;ts_f;te_e;te_f];
+end
+
+%% Recovery
+for i=1:input.auxdata.ncycle
+	cnt = 2*i;
+	
+	Qv{cnt}  = input.phase(cnt).position;
+	Qdv{cnt} = input.phase(cnt).velocity;
+	
+	as_e  = input.phase(cnt).control(:,1);
+	as_f  = input.phase(cnt).control(:,3);
+	ae_e  = input.phase(cnt).control(:,2);
+	ae_f  = input.phase(cnt).control(:,4);
+	act{cnt} = [as_e;as_f;ae_e;ae_f];
+	ts_e  = input.phase(cnt).control(:,5);
+	ts_f  = input.phase(cnt).control(:,7);
+	te_e  = input.phase(cnt).control(:,6);
+	te_f  = input.phase(cnt).control(:,8);
+	tau{cnt} = [ts_e;ts_f;te_e;te_f];
+end
+
+%% Control Law
+for i=1:2*input.auxdata.ncycle+1
+    V_imp = input.phase(i).state(:,1);
+    i_err = input.phase(i).state(:,2);
+    
+	err = V_imp/input.auxdata.PAR.Rr-Qdv{i}(3);
+    LC{i} = Kte*(Jtotal*err+Btotal*i_err);
+    CTR{i} = [V_imp;i_err;err];
+end
+
+%% Activation to Torque Constraints
+for i=1:2*input.auxdata.ncycle+1
+	[ap1, bt1] = dof_conversion(Qv{i}(1),Qv{i}(2),'Type', 'angle');
+	[dap1, dbt1] = dof_conversion(Qdv{i}(1),Qdv{i}(2),'Type', 'angvel');
+	[~,~,TV{i},TP{i}] = MTG_smooth(act{i}(2),act{i}(1),act{i}(4),act{i}(3),ap1,bt1,dap1,dbt1);
+end
+
+%% Propulsion
+for i=0:input.auxdata.ncycle
+	cnt = 2*i+1;
+	
+	tau_s1 = tau{cnt}(1)-tau{cnt}(2)-2*TP{cnt}(1);
+	tau_e1 = tau{cnt}(3)-tau{cnt}(4)-2*TP{cnt}(2);
+    tau_t  = input.phase(cnt).control(:,7)/input.auxdata.PAR.Rr;
+
+	[M1,ke1,~,H1,k1] = four_bar_system(Qv{cnt}, Qdv{cnt},input.auxdata.PAR,'Type','Reference');
+	MM1 = PHI{cnt}'*M1*PHI{cnt};
+	K1  = PHI{cnt}'*M1*dPHI{cnt}*Qdv{cnt}(3);
+	KE1 = PHI{cnt}'*(H1*[tau_s1;tau_e1]+ke1-k1);
+	qdd1 = MM1\(KE1-K1);
+	qdd1 = dPHI{cnt}*Qdv{cnt}(3)+PHI{cnt}*qdd1;
+	tp = M1(3,:)*qdd1-ke1(3)+k1(3)-LC{cnt};
+	
+	output.phase(cnt).RightHandSide = KE1-K1+LC{cnt};
+	output.phase(cnt).MassMatrix = MM1;
+    output.phase(cnt).derivatives = [(1/Mi)*(tau_t-Ci*CTR{cnt}(1)), CTR{cnt}(3)];
+	output.phase(cnt).path = [Qv{cnt}(1)-Qv{cnt}(2), ...
+		input.auxdata.PAR.A*sin(Qv{cnt}(1))+input.auxdata.PAR.B*sin(Qv{cnt}(2))-input.auxdata.PAR.R*sin(Qv{cnt}(3))-input.auxdata.PAR.Y, ...
+		input.auxdata.PAR.A*cos(Qv{cnt}(1))+input.auxdata.PAR.B*cos(Qv{cnt}(2))-input.auxdata.PAR.R*cos(Qv{cnt}(3))-input.auxdata.PAR.h, ...
+		tp-input.phase(cnt).control(:,7), ...
+		tau{cnt}(2)-TV{cnt}(1), tau{cnt}(1)+TV{cnt}(2), ...
+        tau{cnt}(4)-TV{cnt}(3), tau{cnt}(3)+TV{cnt}(4)];
+end
+
+%% Recovery
+for i=1:input.auxdata.ncycle
+	cnt = 2*i;
+	
+	tau_s2 = tau{cnt}(1)-tau{cnt}(2)-2*TP{cnt}(1);
+	tau_e2 = tau{cnt}(3)-tau{cnt}(4)-2*TP{cnt}(2);
+	
+	[M2,ke2,~,H2,k2] = four_bar_system(Qv{cnt}, Qdv{cnt},input.auxdata.PAR,'Type','Reference');
+	output.phase(cnt).RightHandSide = H2*[tau_s2;tau_e2] + ke2 -k2 + [0;0;LC{cnt}];
+	output.phase(cnt).MassMatrix = M2;
+    output.phase(cnt).derivatives = [(1/Mi)*(-Ci*CTR{cnt}(1)), CTR{cnt}(3)];
+	output.phase(cnt).path = [Qv{cnt}(1)-Qv{cnt}(2), ...
+		tau{cnt}(2)-TV{cnt}(1), tau{cnt}(1)+TV{cnt}(2), ...
+        tau{cnt}(4)-TV{cnt}(3), tau{cnt}(3)+TV{cnt}(4)];
+end
+
+%% Link Between Cycles
+for i=1:input.auxdata.ncycle	
+	prop1 = 2*i-1;
+	ret   = 2*i;
+	prop2 = 2*i+1;
+	
+	[~,~,PHI2i] = idof_transform(input.phase(ret).initial.position(1),input.phase(ret).initial.position(2),input.phase(ret).initial.position(3),input.phase(ret).initial.velocity(3),input.auxdata.PAR);
+	[~,~,PHI2f] = idof_transform(input.phase(ret).final.position(1),input.phase(ret).final.position(2),input.phase(prop2).initial.position,input.phase(ret).final.velocity(3),input.auxdata.PAR);
+	
+	p_constraints = [p_constraints, input.phase(ret).initial.time-input.phase(prop1).final.time];
+	p_constraints = [p_constraints,input.phase(ret).initial.position(3)-input.phase(prop1).final.position, ...
+		input.auxdata.PAR.A*sin(input.phase(ret).initial.position(1))+input.auxdata.PAR.B*sin(input.phase(ret).initial.position(2))-input.auxdata.PAR.R*sin(input.phase(ret).initial.position(3))-input.auxdata.PAR.Y, ...
+		input.auxdata.PAR.A*cos(input.phase(ret).initial.position(1))+input.auxdata.PAR.B*cos(input.phase(ret).initial.position(2))-input.auxdata.PAR.R*cos(input.phase(ret).initial.position(3))-input.auxdata.PAR.h, ...
+		input.phase(prop1).final.velocity*PHI2i'-input.phase(ret).initial.velocity, ...
+        input.phase(prop1).final.state-input.phase(ret).initial.state, ...
+		input.auxdata.PAR.A*sin(input.phase(ret).final.position(1))+input.auxdata.PAR.B*sin(input.phase(ret).final.position(2))-input.auxdata.PAR.R*sin(input.phase(prop2).initial.position)-input.auxdata.PAR.Y, ...
+		input.auxdata.PAR.A*cos(input.phase(ret).final.position(1))+input.auxdata.PAR.B*cos(input.phase(ret).final.position(2))-input.auxdata.PAR.R*cos(input.phase(prop2).initial.position)-input.auxdata.PAR.h, ...
+		input.phase(ret).final.velocity-PHI2f'*input.phase(prop2).initial.velocity, ...
+        input.phase(ret).final.state-input.phase(prop2).initial.state, ...
+		input.phase(prop2).initial.time-input.phase(ret).final.time, ...
+		input.phase(prop1).final.time-input.phase(prop1).initial.time, ...
+		input.phase(ret).final.time-input.phase(ret).initial.time, ...
+		input.phase(prop1).final.position-input.phase(prop1).initial.position, ...
+		col(input.phase(prop1).parameter,1) - input.phase(prop1).initial.position];
+		
+	theta_total = theta_total + input.phase(ret).final.position(3)-input.phase(prop1).initial.position;
+end
+
+%% Objective
+if input.auxdata.tracking
+    for i=1:2*input.auxdata.ncycle+1
+        obji = 0;
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(1)-Qv{i}(1)).^indice);
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(2)-Qv{i}(2)).^indice);
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(3)-act{i}(1)).^indice);
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(4)-act{i}(3)).^indice);
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(5)-act{i}(2)).^indice);
+        obji = obji + integrate(input.phase(i).integrand,(input.phase(i).constant_vector(6)-act{i}(4)).^indice);
+        obj = obj + obji;
+    end
+else
+    for i=1:2*input.auxdata.ncycle+1
+% 	obji = integrate(input.phase(i).integrand,tau{i}(1).^indice+tau{i}(2).^indice);
+% 	obji = obji + integrate(input.phase(i).integrand,tau{i}(3).^indice+tau{i}(4).^indice);
+        obji = integrate(input.phase(i).integrand,act{i}(1).^indice+act{i}(2).^indice);
+        obji = obji + integrate(input.phase(i).integrand,act{i}(3).^indice+act{i}(4).^indice);
+%     obji = obji./(input.phase(i).final.time-input.phase(i).initial.time);
+        obj = obj + obji;
+    end
+end
+
+% for cyc=0:input.auxdata.ncycle
+%     obji = 0;
+%     if cyc == input.auxdata.ncycle
+%         endi = 1;
+%     else 
+%         endi = 2;
+%     end
+%     for i=1:endi
+% % 	obji = obji + integrate(input.phase(2*cyc+i).integrand,tau{2*cyc+i}(1).^indice+tau{2*cyc+i}(2).^indice);
+% % 	obji = obji + integrate(input.phase(2*cyc+i).integrand,tau{2*cyc+i}(3).^indice+tau{2*cyc+i}(4).^indice);
+%     obji = obji + integrate(input.phase(2*cyc+i).integrand,act{2*cyc+i}(1).^indice+act{2*cyc+i}(2).^indice);
+% 	obji = obji + integrate(input.phase(2*cyc+i).integrand,act{2*cyc+i}(3).^indice+act{2*cyc+i}(4).^indice);
+%     end
+%     obji = obji./(input.phase(2*cyc+endi).final.time-input.phase(2*cyc+1).initial.time);
+%     obj = obj + obji;
+% end
+
+% output.objective = obj./(input.phase(end).final.time-input.phase(1).initial.time);
+output.objective = obj;
+
+%% Final Link
+theta_total = (theta_total+input.phase(prop2).final.position-input.phase(prop2).initial.position);
+mean_velocity = theta_total*input.auxdata.PAR.Rr./input.phase(prop2).final.time;
+p_constraints = [p_constraints, input.phase(prop2).final.time-input.phase(prop2).initial.time, ...
+    mean_velocity, ...
+    col(input.phase(prop1).parameter,1) - input.phase(prop2).initial.position];
+output.constraints = p_constraints;
