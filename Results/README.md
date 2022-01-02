@@ -8,3 +8,16 @@ Inside the structure, there are 4 sub-sections as follows:
       Each rows represents a different case, where columns is the mass and frictions multipliers.
       
 ## FDATA Structure
+
+FDATA has 2 mainly structures:
+
+  - Plano: Simulations on the plane surface;
+  - Rampa: Simulations with a slope angle of 3 degrees;
+
+For each type represented before, there are 2 mainly types of simulations:
+
+  - Reference: Simulation without the controller;
+  - PIController: Simulation with the PI impedance controller. It follows the rows 
+
+### Simulations Structure
+
