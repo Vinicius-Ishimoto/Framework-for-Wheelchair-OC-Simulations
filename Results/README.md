@@ -17,7 +17,13 @@ FDATA has 2 mainly structures:
 For each type represented before, there are 2 mainly types of simulations:
 
   - Reference: Simulation without the controller;
-  - PIController: Simulation with the PI impedance controller. It follows the rows 
+  - PIController: Simulation with the PI impedance controller. It follows the rows cases depicted in the "Simulations".
 
 ### Simulations Structure
 
+The structure inside each simulation case, has the following properties:
+
+    - Person: Parameters utilized on the model;
+    - Options: Options inserted on the function for the simulation;
+    - Results: Vector of results from the optimal control over time with all the phases concatenated;
+    - Raw: Raw results got from the optimizer;
