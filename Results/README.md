@@ -11,7 +11,7 @@ Inside the structure, there are 4 sub-sections as follows:
 
 FDATA has 2 mainly structures:
 
-  - Plano: Simulations on the plane surface;
+  - Plano: Simulations on the level surface;
   - Rampa: Simulations with a slope angle of 3 degrees;
 
 For each type represented before, there are 2 mainly types of simulations:
