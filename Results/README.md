@@ -6,7 +6,8 @@ Inside the structure, there are 4 sub-sections as follows:
   - ReferenceModel: Mass and Friction of the reference model used in the simulations;
   - Simulations: Table with the multipliers of the impedance model in relation to the reference model.
       
-      Each row represents a different case: M100-C100, M50-C100, M100-C50 and M50-C50;
+      Each row represents a different case: M100-C100, M50-C100, M100-C50 and M50-C50, in this following order.
+
       
 ## FDATA Structure
 
@@ -20,7 +21,7 @@ For each type represented before, there are 2 main types of simulations:
   - Reference: Simulation without the controller;
   - PIController: Simulation with the PI impedance controller. 
    
-      Each structure represents the cases: M100-C100, M50-C100, M100-C50 and M50-C50.
+      Each structure represents the cases: M100-C100, M50-C100, M100-C50 and M50-C50, in this following order.
 
 ### Simulations Structure
 
