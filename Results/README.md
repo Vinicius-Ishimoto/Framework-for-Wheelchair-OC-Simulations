@@ -27,7 +27,7 @@ For each type represented before, there are 2 main types of simulations:
 
 The structure inside each simulation case, has the following properties:
 
-    - Person: Parameters utilized on the model;
-    - Options: Options inserted on the function for the simulation;
-    - Results: Vector of results from the optimal control over time with all the phases concatenated;
-    - Raw: Raw results got from the optimizer;
+   - Person: Parameters utilized on the model;
+   - Options: Options inserted on the function for the simulation;
+   - Results: Vector of results from the optimal control over time with all the phases concatenated;
+   - Raw: Raw results got from the optimizer;
