@@ -35,9 +35,9 @@ Examples:
     PersonData = FDATA.Plano.PIController{2}.Person % User/Wheelchair parameters for the simulation on level surface with controller case M50-C100
     Results = FDATA.Rampa.Reference.Results % Results concatenated for the simulation on a slope angle without controller
     
-# Wheelchair/Person Parameters
+# Wheelchair/Person Parameters Field
 
-Some of the parameters used in the simulations are explained below. Due to the simetry adopted, the inertial parameters represents the data of both arms:
+Parameters shown in the .Person field. Some of the parameters used in the simulations are explained below. Due to the simetry adopted, the inertial parameters represents the data of both arms:
 
   - ma, Ja, a, A: mass, inertia, distance from the shoulder to the center of mass and total length of the upperarms;
   - mb, Jb, b, B: mass, inertia, distance from the elbow to the center of mass and total length of the forearms;
@@ -50,3 +50,18 @@ Some of the parameters used in the simulations are explained below. Due to the s
   - thetac1, thetac2: critical values of theta. Values where the the arms are full extended in the propulsion phase.
 
 The other values in the function are deprecated.
+
+# Results Field
+
+Here, the results from the simulations are concatenated over time, some of the main data are:
+
+  - time: time vector
+  - alpha, dalpha: angle and angular velocity between the upperarm and the relative-horzontal plane;
+  - beta, dbeta: angle and angular velocity between the forearm and the relative-horzontal plane;
+  - theta, dtheta: angle and angular velocity of the rear wheels of the wheelchair. The initial value is the initial contact in the propulsion phase;
+  - taup: tangencial torque applied by the user;
+  - act_se, act_sf, act_ee, act_ef: muscle activation of the shoulder extension and flexion and elbow extension and flexion respectively;
+  - dct_se, dct_sf, dct_ee, dct_ef: neural excitation of the shoulder extension and flexion and elbow extension and flexion respectively;
+  - tau_se, tau_sf, tau_ee, tau_ef: torque related to the shoulder extension and flexion and elbow extension and flexion respectively;
+  - tau_sp, tau_ep: passive torque of the shoulder and elbow respectively;
+  - x: total displacement of the wheelchair;
