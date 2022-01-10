@@ -47,9 +47,10 @@ Parameters shown in the .Person field. Some of the parameters used in the simula
   - h, Y: horizontal and vertical distance between the shoulders and the center of the rear wheels of the wheelchair;
   - dFric, Frr, Ang: friction coeficient, roling resistance and slope angle;
   - Mi, Ci, Fri: mass, friction coeficient and rolling resistance of the impedance controller;
-  - thetac1, thetac2: critical values of theta. Values where the the arms are full extended in the propulsion phase.
+  - thetac1, thetac2: critical values of theta. Values where the the arms are full extended in the propulsion phase;
+  - const: constant of the controller;
 
-The other values in the function are deprecated.
+The other values in the function are deprecated, or only used as reference values.
 
 # Results Field
 
