@@ -3,14 +3,14 @@ function [  T, ...
            TA, ...
            TP ] = muscle_torque_generators(Tact_sf,Tact_se,Tact_ef,Tact_ee,theta_s,theta_e,dtheta_s,dtheta_e)       
 
-    % Dados antropométricos na Tese do Colin Brown (Apêndice B).
-    % Shoulder + no sentido anti-horário
-    % Elbow + no sentido anti-horário
-    % Ângulos relativos 
-    %    Shoulder: braço em relação ao tronco
-    %    Elbow: ante-braço em relação ao braço 
+    % Antropometric data based on Colin Brown thesis (Apendix B).
+    % Shoulder + is counter-clockwise
+    % Elbow + is counter-clockwise
+    % Angles reference
+    %    Shoulder: upperarm in relation to the trunk
+    %    Elbow: forearm in relation to the upper-arm
     %
-    % Saidas
+    % Outputs
     %       T  = [T_sf,  T_se,  T_ef,  T_ee]
     %       TV = [TV_sf, TV_se, TV_ef, TV_ee]
     %       TA = [TA_sf, TA_se, TA_ef, TA_ee]
@@ -21,14 +21,14 @@ function [  T, ...
     %       T_ee = Torque elbow extension
     %       TP_s = Torque passive shoulder
     %       TP_e = Torque passive flexion
-    % Entradas
+    % Inputs
     %   Tact_sf = Activation shoulder flexion   [0 ... 1/2 ... 1]
     %   Tact_se = Activation shoulder extension [0 ........... 1]
     %   Tact_ef = Activation elbow flexion      [0 ........... 1]
     %   Tact_ee = Activation elbow extension    [0 ... 1/2 ... 1]
-    %   theta_s = Theta soulder                 [-30º ...... 60º]
+    %   theta_s = Theta shoulder                [-30º ...... 60º]
     %   theta_e = Theta elbow                   [0º ....... 120º]
-    %  dtheta_s = dot Theta soulder             [-2 .... 2 rad/s]
+    %  dtheta_s = dot Theta shoulder            [-2 .... 2 rad/s]
     %  dtheta_e = dot Theta elbow               [-2 .... 2 rad/s]
 
 %% TVs
@@ -43,10 +43,10 @@ function [  T, ...
         Tm = 1.4*To;
         we = (Tm - To)*wmax*wc/(k*To*(wmax + wc));
         E = -(Tm - To)*we;
-        TVs_sf = E/(we - dtheta_s*180/pi) + Tm;    % original - Tm
+        TVs_sf = E/(we - dtheta_s*180/pi) + Tm;    % original reference: - Tm
     end
     
-    temp_s = -dtheta_s; % ajuste de sinal para seguir a convenção adotada
+    temp_s = -dtheta_s; % sign follows the reference adopted
     if temp_s >= 0
         To = 110; wmax = 2000; wc = 438.53;
         Tc = To*wc/wmax;
@@ -73,7 +73,7 @@ function [  T, ...
         TVs_ef = E/(we - dtheta_e*180/pi) + Tm;
     end
     
-    temp_e = -dtheta_e;  % ajuste de sinal para seguir a convenção adotada
+    temp_e = -dtheta_e;  % sign follows the reference adopted
     if temp_e >= 0
         To = 52.8; wmax = 1999.99; wc = 614.17;
         Tc = To*wc/wmax;
@@ -118,10 +118,10 @@ function [  T, ...
 
 %% TA (ok)
     
-    a = -0.109; b = 0.180; c = 0.144; d = -0.287; e = +0.817;  % original e = -0.817
+    a = -0.109; b = 0.180; c = 0.144; d = -0.287; e = +0.817;  % original: e = -0.817 (adapted for the reference)
     TA_sf = a*theta_s^4 + b*theta_s^3 + c*theta_s^2 + d*theta_s^1 + e;
 %    
-    a = -0.230; b = 0.389; c = 0.794;    % original fala que é de 4a ordem (apêndice)
+    a = -0.230; b = 0.389; c = 0.794;    % original is a fourth ordem (appendix)
     TA_se = a*theta_s^2 + b*theta_s^1 + c;
 %
     a = -0.279; b = 0.576; c = 0.580;    
@@ -133,7 +133,7 @@ function [  T, ...
     TA = [TA_sf, TA_se, TA_ef, TA_ee];
 
 %% TP
-                                                             % original +k4 na fórmula  
+                                                             % original: +k4 (adapted for the reference)
     O1 = -1.14;  O2 = 1.27; k1 = 7.03; k2 = 2.31; k3 = 4.30; k4 = 1.65; C = 0.1;
     TP_s = k1*exp(-k2*(theta_s - O1)) - k3*exp(-k4*(O2 - theta_s)) - C*(dtheta_s);
 %
@@ -144,20 +144,10 @@ function [  T, ...
 
 %% T
 
-    T_sf = +(Tact_sf)*(TV_sf*TA_sf) + TP_s;  % sinal ajustado conforme convenção
-    T_se = -(Tact_se)*(TV_se*TA_se) + TP_s;  % sinal ajustado conforme convenção
-    T_ef = +(Tact_ef)*(TV_ef*TA_ef) + TP_e;  % sinal ajustado conforme convenção
-    T_ee = -(Tact_ee)*(TV_ee*TA_ee) + TP_e;  % sinal ajustado conforme convenção
-    
-%% Smooth Factor
-factor = 10;
-
-    T_sf = 1/(1+exp(-factor*T_sf))*T_sf;
-    T_se = (1-1/(1+exp(-factor*T_se)))*T_se;
-    T_ef = 1/(1+exp(-factor*T_ef))*T_ef;
-    T_ee = (1-1/(1+exp(-factor*T_ee)))*T_ee;
-    
-    T = [T_sf, T_se, T_ef, T_ee];
+    T_sf = +(Tact_sf)*(TV_sf*TA_sf) + TP_s;  % sign follows the reference adopted
+    T_se = -(Tact_se)*(TV_se*TA_se) + TP_s;  % sign follows the reference adopted
+    T_ef = +(Tact_ef)*(TV_ef*TA_ef) + TP_e;  % sign follows the reference adopted
+    T_ee = -(Tact_ee)*(TV_ee*TA_ee) + TP_e;  % sign follows the reference adopted
 
 end
 
