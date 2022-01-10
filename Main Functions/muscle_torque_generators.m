@@ -26,7 +26,7 @@ function [  T, ...
     %   Tact_se = Activation shoulder extension [0 ........... 1]
     %   Tact_ef = Activation elbow flexion      [0 ........... 1]
     %   Tact_ee = Activation elbow extension    [0 ... 1/2 ... 1]
-    %   theta_s = Theta shoulder                [-30º ...... 60º]
+    %   theta_s = Theta shoulder                [-70º ...... 60º]
     %   theta_e = Theta elbow                   [0º ....... 120º]
     %  dtheta_s = dot Theta shoulder            [-2 .... 2 rad/s]
     %  dtheta_e = dot Theta elbow               [-2 .... 2 rad/s]
