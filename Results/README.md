@@ -57,8 +57,8 @@ The other values in the function are deprecated, or only used as reference value
 Here, the results from the simulations are concatenated over time, some of the main data are:
 
   - time: time vector
-  - alpha, dalpha: angle and angular velocity between the upperarm and the relative-horzontal plane;
-  - beta, dbeta: angle and angular velocity between the forearm and the relative-horzontal plane;
+  - alpha, dalpha: angle and angular velocity between the upperarm and the direction of motion;
+  - beta, dbeta: angle and angular velocity between the forearm and the direction of motion;
   - theta, dtheta: angle and angular velocity of the rear wheels of the wheelchair. The initial value is the initial contact in the propulsion phase;
   - taup: tangencial torque applied by the user;
   - act_se, act_sf, act_ee, act_ef: muscle activation of the shoulder extension and flexion and elbow extension and flexion respectively;
