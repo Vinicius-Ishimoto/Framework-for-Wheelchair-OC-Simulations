@@ -23,8 +23,6 @@ For each type represented before, there are 2 main types of simulations:
    
       Each structure represents the cases: M100-C100, M50-C100, M100-C50 and M50-C50, in this order.
 
-### Simulations Structure
-
 The structure inside each simulation case, has the following properties:
 
    - Person: Parameters utilized on the model;
